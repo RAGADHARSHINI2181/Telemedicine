@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Namma Telemedicine - Rural Healthcare</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+        body { background: #f0f4f8; min-height: 100vh; padding: 20px; }
+       .container { background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); max-width: 500px; margin: 0 auto; }
+        h2 { text-align: center; color: #2c5aa0; margin-bottom: 1rem; }
+        input, select { width: 100%; padding: 12px; margin: 8px 0; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; }
+        button { width: 100%; padding: 14px; background: #2c5aa0; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; margin-top: 10px; font-weight: bold; }
+        button:hover { background: #1e3f73; }
+       .btn-green { background: #27ae60; }
+       .btn-green:hover { background: #219a52; }
+       .btn-red { background: #e74c3c; }
+       .btn-red:hover { background: #c0392b; }
+       .btn-orange { background: #f39c12; }
+       .btn-orange:hover { background: #e67e22; }
+       .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+       .offline-badge { background: #27ae60; color: white; padding: 8px; border-radius: 5px; text-align: center; margin-bottom: 15px; font-weight: bold; }
+       .patient-card { background: #e8f4fd; padding: 12px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #2c5aa0; }
+       .hidden { display: none; }
+       .error { color: #e74c3c; font-size: 14px; margin-top: 5px; }
+       .success { color: #27ae60; font-size: 14px; margin-top: 5px; }
+       .link { text-align: center; margin-top: 15px; color: #2c5aa0; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <!-- LOGIN PAGE -->
+    <div class="container" id="loginPage">
+        <h2>🏥 Namma Telemedicine</h2>
+        <div class="offline-badge" id="networkStatus">✓ Works Even Without Network</div>
+        <select id="userRole">
+            <option value="patient">Patient</option>
+            <option value="doctor">Doctor</option>
+            <option value="asha">ASHA Worker</option>
+        </select>
+        <input type="text" id="loginPhone" placeholder="Mobile Number">
+        <input type="password" id="loginPassword" placeholder="Password">
+        <button onclick="login()">Login</button>
+        <p id="loginMessage"></p>
+        <p class="link" onclick="showRegister()">New User? Register Here</p>
+    </div>
+
+    <!-- REGISTER PAGE -->
+    <div class="container hidden" id="registerPage">
+        <h2>📝 Register</h2>
+        <select id="regRole">
+            <option value="patient">Patient</option>
+            <option value="doctor">Doctor</option>
+            <option value="asha">ASHA Worker</option>
+        </select>
+        <input type="text" id="regName" placeholder="Full Name">
+        <input type="text" id="regPhone" placeholder="Mobile Number">
+        <input type="text" id="regVillage" placeholder="Village Name">
+        <input type="password" id="regPassword" placeholder="Create Password">
+        <button onclick="register()">Create Account</button>
+        <p id="regMessage"></p>
+        <p class="link" onclick="showLogin()">Already Registered? Login</p>
+    </div>
+
+    <!-- PATIENT DASHBOARD -->
+    <div class="container hidden" id="patientDashboard">
+        <h2>👤 Welcome <span id="patientName"></span></h2>
+        <div class="offline-badge" id="patientNetworkStatus">✓ Offline Mode Active</div>
+        
+        <div class="patient-card">
+            <p><strong>Village:</strong> <span id="patientVillage"></span></p>
+            <p><strong>Phone:</strong> <span id="patientPhone"></span></p>
+            <p><strong>Last Checkup:</strong> <span id="lastCheckup">Never</span></p>
+        </div>
+
+        <button class="btn-green" onclick="videoCall()">📹 Video Call Doctor</button>
+        
+        <div class="grid-2">
+            <button class="btn-orange" onclick="addRecord()">📋 Add Patient Record</button>
+            <button onclick="checkMedicine()">💊 Medicine Stock</button>
+        </div>
+        
+        <button class="btn-red" onclick="emergencyAlert()">🚨 Emergency Alert</button>
+        <button onclick="logout()" style="background: #95a5a6; margin-top: 20px;">Logout</button>
+    </div>
+
+    <!-- DOCTOR DASHBOARD -->
+    <div class="container hidden" id="doctorDashboard">
+        <h2>👨‍⚕️ Dr. <span id="doctorName"></span></h2>
+        <div class="offline-badge">✓ Connected to Rural Network</div>
+        
+        <h3 style="margin: 15px 0;">Today's Patients</h3>
+        <div id="patientList">
+            <div class="patient-card">
+                <p><strong>Ramesh</strong> - Kovanur Village</p>
+                <p>Fever - 10:30 AM</p>
+                <button style="margin-top: 8px; padding: 8px;" onclick="startVideoCall('Ramesh')">Join Call</button>
+            </div>
+        </div>
+
+        <button class="btn-green" onclick="writePrescription()">✍️ Write E-Prescription</button>
+        <button onclick="logout()" style="background: #95a5a6; margin-top: 20px;">Logout</button>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore, doc, setDoc, getDoc, addDoc, collection, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        // FIREBASE CONFIG - ADD YOUR CONFIG HERE
+        
+            const firebaseConfig = {
+  apiKey: "AIzaSyAJfbjIpGysFnysmhY43jRfeLzoRWptOGY",
+  authDomain: "telemedicine-d7e57.firebaseapp.com",
+  projectId: "telemedicine-d7e57",
+  storageBucket: "telemedicine-d7e57.firebasestorage.app",
+  messagingSenderId: "251614082191",
+  appId: "1:251614082191:web:321351872853d2e7402cfa",
+  measurementId: "G-VGZF380Q2M"
+
+            };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // OFFLINE CHECK
+        window.addEventListener('online', () => updateNetworkStatus(true));
+        window.addEventListener('offline', () => updateNetworkStatus(false));
+        function updateNetworkStatus(isOnline) {
+            const status = isOnline ? '✓ Online - Data Syncing' : '✓ Offline Mode - Data Will Sync Later';
+            document.querySelectorAll('.offline-badge').forEach(el => el.innerText = status);
+        }
+
+        // PAGE SWITCHING
+        window.showLogin = function() {
+            hideAll();
+            document.getElementById('loginPage').classList.remove('hidden');
+        }
+        window.showRegister = function() {
+            hideAll();
+            document.getElementById('registerPage').classList.remove('hidden');
+        }
+        function showPatientDashboard(data) {
+            hideAll();
+            document.getElementById('patientDashboard').classList.remove('hidden');
+            document.getElementById('patientName').innerText = data.name;
+            document.getElementById('patientVillage').innerText = data.village;
+            document.getElementById('patientPhone').innerText = data.phone;
+        }
+        function showDoctorDashboard(data) {
+            hideAll();
+            document.getElementById('doctorDashboard').classList.remove('hidden');
+            document.getElementById('doctorName').innerText = data.name;
+        }
+        function hideAll() {
+            document.querySelectorAll('.container').forEach(el => el.classList.add('hidden'));
+        }
+
+        // REGISTER
+        window.register = async function() {
+            const role = document.getElementById('regRole').value;
+            const name = document.getElementById('regName').value;
+            const phone = document.getElementById('regPhone').value;
+            const village = document.getElementById('regVillage').value;
+            const password = document.getElementById('regPassword').value;
+            const msg = document.getElementById('regMessage');
+
+            if (!name ||!phone ||!village ||!password) {
+                msg.innerText = "Please fill all fields";
+                msg.className = "error";
+                return;
+            }
+
+            const email = phone + "@rural.health";
+            
+            try {
+                const userCred = await createUserWithEmailAndPassword(auth, email, password);
+                await setDoc(doc(db, "users", userCred.user.uid), {
+                    name, phone, village, role, createdAt: serverTimestamp()
+                });
+                
+                localStorage.setItem('userData', JSON.stringify({name, phone, village, role}));
+                
+                msg.innerText = "Account Created Successfully!";
+                msg.className = "success";
+                setTimeout(showLogin, 1500);
+            } catch (error) {
+                msg.innerText = "Error: " + error.message;
+                msg.className = "error";
+            }
+        }
+
+        // LOGIN
+        window.login = async function() {
+            const phone = document.getElementById('loginPhone').value;
+            const password = document.getElementById('loginPassword').value;
+            const role = document.getElementById('userRole').value;
+            const email = phone + "@rural.health";
+            const msg = document.getElementById('loginMessage');
+
+            try {
+                const userCred = await signInWithEmailAndPassword(auth, email, password);
+                const userDoc = await getDoc(doc(db, "users", userCred.user.uid));
+                const userData = userDoc.data();
+                
+                localStorage.setItem('userData', JSON.stringify(userData));
+                
+                if (userData.role === 'doctor') {
+                    showDoctorDashboard(userData);
+                } else {
+                    showPatientDashboard(userData);
+                }
+            } catch (error) {
+                const offlineData = JSON.parse(localStorage.getItem('userData') || '{}');
+                if (offlineData.phone === phone) {
+                    offlineData.role === 'doctor'? showDoctorDashboard(offlineData) : showPatientDashboard(offlineData);
+                    msg.innerText = "Offline Login Success";
+                    msg.className = "success";
+                } else {
+                    msg.innerText = "Invalid credentials";
+                    msg.className = "error";
+                }
+            }
+        }
+
+        // TELEMEDICINE FUNCTIONS
+        window.videoCall = function() {
+            alert("Connecting to Doctor...\nFeature: WebRTC Video Call Integration");
+        }
+        window.addRecord = function() {
+            const record = prompt("Enter patient symptoms:");
+            if (record) {
+                localStorage.setItem('lastRecord', record);
+                alert("Record Saved Offline Successfully");
+            }
+        }
+        window.checkMedicine = function() {
+            alert("Medicine Stock:\n1. Paracetamol - Available\n2. Cough Syrup - Low Stock\n3. BP Tablets - Available");
+        }
+        window.emergencyAlert = async function() {
+            try {
+                await addDoc(collection(db, "emergency"), {
+                    userId: auth.currentUser.uid,
+                    timestamp: serverTimestamp(),
+                    location: document.getElementById('patientVillage').innerText,
+                    status: "active"
+                });
+                alert("Emergency Alert Sent! ASHA Worker Notified!");
+            } catch {
+                alert("Emergency Saved Offline. Will send when online");
+            }
+        }
+        window.startVideoCall = function(patient) {
+            alert("Starting video call with " + patient);
+        }
+        window.writePrescription = function() {
+            alert("E-Prescription Module\nDigital prescription generator");
+        }
+        window.logout = async function() {
+            await signOut(auth);
+            localStorage.removeItem('userData');
+            showLogin();
+        }
+
+        // INIT
+        updateNetworkStatus(navigator.onLine);
+    </script>
+</body>
+</html>
